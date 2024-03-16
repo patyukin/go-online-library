@@ -1,0 +1,8 @@
+### Send POST request with json body
+POST http://0.0.0.0:8087/v1/filters
+Content-Type: application/json
+
+{
+  "id": 999,
+  "value": "content"
+}
