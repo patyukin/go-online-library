@@ -7,6 +7,8 @@ services:
     restart: always
     volumes:
       - .:/app
+    ports:
+      - "8087:8087"
     depends_on:
       - redis
       - db
@@ -20,10 +22,38 @@ services:
       MYSQL_DATABASE: onlib
       MYSQL_USER: user
       MYSQL_PASSWORD: 1234
+    command: mysqld --general-log=1 --general-log-file=/var/log/mysql/general-log.log
+    volumes:
+      - mysql_db:/var/lib/mysql
+      - ./docker:/etc/mysql/conf.docker
+
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./metrics/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    ports:
+      - '9090:9090'
+
+  node-exporter:
+    image: prom/node-exporter
+    ports:
+      - '9100:9100'
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+      - "3000:3000"
 
   redis:
     image: redis
     ports:
       - "6378:6379"
+    volumes:
+      - redis_db:/data
 
-#  migrator:
+volumes:
+  mysql_db:
+  redis_db:

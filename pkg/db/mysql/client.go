@@ -8,26 +8,31 @@ import (
 	"github.com/patyukin/go-online-library/pkg/db"
 )
 
-type mysqlClient struct {
+type Client struct {
 	dbClient db.DB
 }
 
-func New(_ context.Context, dsn string) (db.Client, error) {
+func New(ctx context.Context, dsn string) (*Client, error) {
 	dbConn, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to db: %v", err)
 	}
 
-	return &mysqlClient{
+	err = dbConn.PingContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Client{
 		dbClient: &mysql{dbConn: dbConn},
 	}, nil
 }
 
-func (c *mysqlClient) DB() db.DB {
+func (c *Client) DB() db.DB {
 	return c.dbClient
 }
 
-func (c *mysqlClient) Close() error {
+func (c *Client) Close() error {
 	if c.dbClient != nil {
 		c.dbClient.Close()
 	}
@@ -35,6 +40,6 @@ func (c *mysqlClient) Close() error {
 	return nil
 }
 
-func (c *mysqlClient) GetSqlDB() *sql.DB {
+func (c *Client) GetSqlDB() *sql.DB {
 	return c.dbClient.GetSqlDB()
 }

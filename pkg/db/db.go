@@ -5,6 +5,8 @@ import (
 	"database/sql"
 )
 
+//go:generate go run github.com/vektra/mockery/v2@v2.42.0 --name=TxManager --with-expecter=true
+
 // Handler - функция, которая выполняется в транзакции
 type Handler func(ctx context.Context) error
 
@@ -53,7 +55,7 @@ type QueryExecer interface {
 
 // Pinger интерфейс для проверки соединения с БД
 type Pinger interface {
-	Ping(ctx context.Context) error
+	PingContext(ctx context.Context) error
 }
 
 // DB интерфейс для работы с БД

@@ -2,109 +2,67 @@ package repository
 
 import (
 	"context"
-	"database/sql"
+	"fmt"
 	sq "github.com/Masterminds/squirrel"
-	"github.com/patyukin/go-online-library/internal/repository/model"
+	"github.com/patyukin/go-online-library/internal/usecase/model"
 	"github.com/patyukin/go-online-library/pkg/db"
+	"time"
 )
 
 const (
-	tableFilterName         = "filters"
-	idFilterColumn          = "id"
-	nameFilterColumn        = "name"
-	userNameFilterColumn    = "user_name"
-	bookNameFilterColumn    = "book_name"
-	authorNameFilterColumn  = "author_name"
-	startAtFilterColumn     = "start_at"
-	nextAfterFilterColumn   = "next_after"
-	promotionIDFilterColumn = "promotion_id"
-	createdAtFilterColumn   = "created_at"
-	updatedAtFilterColumn   = "updated_at"
-	deletedAtFilterColumn   = "deleted_at"
+	tableFilterName            = "filters"
+	idFilterColumn             = "id"
+	minAgeFilterColumn         = "min_age"
+	maxAgeFilterColumn         = "max_age"
+	registerDateFilterColumn   = "register_date"
+	lastActivityFilterColumn   = "last_activity"
+	notifyDatetimeFilterColumn = "notify_datetime"
+	createdAtFilterColumn      = "created_at"
+	updatedAtFilterColumn      = "updated_at"
+	deletedAtFilterColumn      = "deleted_at"
 )
 
-type FilterRepo struct {
-	db db.Client
-}
-
-func NewFilterRepo(db db.Client) *FilterRepo {
-	return &FilterRepo{
-		db: db,
-	}
-}
-
-func (r *FilterRepo) Insert(ctx context.Context, filter model.Filter) (int64, error) {
+func (r *Repository) InsertFilter(ctx context.Context, filter model.Filter) (int64, error) {
+	filter.CreatedAt = time.Now().UTC()
 	builder := sq.Insert(tableFilterName).
 		PlaceholderFormat(sq.Question).
-		Columns(nameFilterColumn, userNameFilterColumn, bookNameFilterColumn, authorNameFilterColumn, startAtFilterColumn, nextAfterFilterColumn, promotionIDFilterColumn).
-		Values(filter.Name, filter.UserName, filter.BookName, filter.AuthorName, filter.StartAt, filter.NextAfter, filter.PromotionID).
-		Suffix("RETURNING " + idFilterColumn)
+		Columns(minAgeFilterColumn, maxAgeFilterColumn, registerDateFilterColumn, lastActivityFilterColumn, notifyDatetimeFilterColumn, createdAtFilterColumn).
+		Values(filter.MinAge, filter.MaxAge, filter.RegisterDate, filter.LastActivity, filter.NotifyDatetime, filter.CreatedAt)
 
 	query, args, err := builder.ToSql()
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("error occured while inserting filter: %w", err)
 	}
 
 	q := db.Query{Name: "filter_repository.Insert", QueryRaw: query}
-	err = r.db.DB().QueryRowContext(ctx, q, args...).Scan(&filter.ID)
+	res, err := r.db.DB().ExecContext(ctx, q, args...)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("error occured while inserting filter: %w", err)
 	}
 
-	return filter.ID, nil
+	return res.LastInsertId()
 }
 
-func (r *FilterRepo) Inserts(ctx context.Context, filters []model.Filter) (int64, error) {
-	builder := sq.Insert(tableFilterName).
-		PlaceholderFormat(sq.Question).
-		Columns(nameFilterColumn, userNameFilterColumn, bookNameFilterColumn, authorNameFilterColumn, startAtFilterColumn, nextAfterFilterColumn, promotionIDFilterColumn).
-		Values(filters[0].Name, filters[0].UserName, filters[0].BookName, filters[0].AuthorName, filters[0].StartAt, filters[0].NextAfter, filters[0].PromotionID)
+func (r *Repository) InsertsFilters(ctx context.Context, filters []model.Filter) ([]int64, error) {
+	ids := make([]int64, 0, len(filters))
+	for _, filter := range filters {
+		id, err := r.InsertFilter(ctx, filter)
+		if err != nil {
+			return nil, fmt.Errorf("error occured while inserting filter: %v", err)
+		}
 
-	for i := 1; i < len(filters); i++ {
-		builder = builder.Values(filters[i].Name, filters[i].UserName, filters[i].BookName, filters[i].AuthorName, filters[i].StartAt, filters[i].NextAfter, filters[i].PromotionID)
+		ids = append(ids, id)
 	}
 
-	query, args, err := builder.ToSql()
-	if err != nil {
-		return 0, err
-	}
-
-	q := db.Query{Name: "filter_repository.Inserts", QueryRaw: query}
-	_, err = r.db.DB().ExecContext(ctx, q, args...)
-	if err != nil {
-		return 0, err
-	}
-
-	return int64(len(filters)), nil
+	return ids, nil
 }
 
-func (r *FilterRepo) Update(ctx context.Context, filter model.Filter) error {
-	builder := sq.Update(tableFilterName).
-		PlaceholderFormat(sq.Question).
-		Set(nameFilterColumn, filter.Name).
-		Set(userNameFilterColumn, filter.UserName).
-		Set(bookNameFilterColumn, filter.BookName).
-		Set(authorNameFilterColumn, filter.AuthorName).
-		Set(startAtFilterColumn, filter.StartAt).
-		Set(nextAfterFilterColumn, filter.NextAfter).
-		Set(promotionIDFilterColumn, filter.PromotionID).
-		Where(sq.Eq{"id": filter.ID})
-
-	query, args, err := builder.ToSql()
-	if err != nil {
-		return err
-	}
-
-	q := db.Query{Name: "filter_repository.Update", QueryRaw: query}
-	_, err = r.db.DB().ExecContext(ctx, q, args...)
-	if err != nil {
-		return err
-	}
+func (r *Repository) UpdateFilter(ctx context.Context, filter model.Filter) error {
 
 	return nil
 }
 
-func (r *FilterRepo) Delete(ctx context.Context, filterID int64) error {
+func (r *Repository) DeleteFilter(ctx context.Context, filterID int64) error {
 	builder := sq.Delete(tableFilterName).
 		PlaceholderFormat(sq.Question).
 		Where(sq.Eq{"id": filterID})
@@ -123,56 +81,36 @@ func (r *FilterRepo) Delete(ctx context.Context, filterID int64) error {
 	return nil
 }
 
-func (r *FilterRepo) Get(ctx context.Context, filterID int64) (model.Filter, error) {
-	builder := sq.Select(idFilterColumn, nameFilterColumn, userNameFilterColumn, bookNameFilterColumn, authorNameFilterColumn, startAtFilterColumn, nextAfterFilterColumn, promotionIDFilterColumn, deletedAtFilterColumn).
-		From(tableFilterName).
-		PlaceholderFormat(sq.Question).
-		Where(sq.Eq{"id": filterID})
-
-	query, args, err := builder.ToSql()
-	if err != nil {
-		return model.Filter{}, err
-	}
-
-	q := db.Query{Name: "filter_repository.Get", QueryRaw: query}
-	var filter model.Filter
-	err = r.db.DB().QueryRowContext(ctx, q, args...).Scan(&filter.ID, &filter.Name, &filter.UserName, &filter.BookName, &filter.AuthorName, &filter.StartAt, &filter.NextAfter, &filter.PromotionID, &filter.DeletedAt)
-	if err != nil {
-		return model.Filter{}, err
-	}
-
-	return filter, nil
+func (r *Repository) GetFilter(ctx context.Context, filterID int64) (model.Filter, error) {
+	return model.Filter{}, nil
 }
 
-func (r *FilterRepo) GetAll(ctx context.Context) ([]model.Filter, error) {
-	builder := sq.Select(idFilterColumn, nameFilterColumn, userNameFilterColumn, bookNameFilterColumn, authorNameFilterColumn, startAtFilterColumn, nextAfterFilterColumn, promotionIDFilterColumn, createdAtFilterColumn, updatedAtFilterColumn, deletedAtFilterColumn).
+func (r *Repository) GetAllFilters(ctx context.Context) ([]model.Filter, error) {
+	return []model.Filter{}, nil
+}
+
+func (r *Repository) GetActiveFilters(ctx context.Context) ([]model.Filter, error) {
+	builder := sq.Select(idFilterColumn).
 		From(tableFilterName).
-		PlaceholderFormat(sq.Question)
+		Where(sq.Eq{deletedAtFilterColumn: nil})
 
 	query, args, err := builder.ToSql()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error occured while getting active filters: %w", err)
 	}
 
-	q := db.Query{Name: "filter_repository.GetAll", QueryRaw: query}
+	q := db.Query{Name: "filter_repository.GetActiveFilters", QueryRaw: query}
 	rows, err := r.db.DB().QueryContext(ctx, q, args...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error occured while getting active filters: %w", err)
 	}
 
-	defer func(rows *sql.Rows) {
-		err = rows.Close()
-		if err != nil {
-			//TODO
-		}
-	}(rows)
-
 	var filters []model.Filter
+
 	for rows.Next() {
 		var filter model.Filter
-		err = rows.Scan(&filter.ID, &filter.Name, &filter.UserName, &filter.BookName, &filter.AuthorName, &filter.StartAt, &filter.NextAfter, &filter.PromotionID, &filter.CreatedAt, &filter.UpdatedAt, &filter.DeletedAt)
-		if err != nil {
-			return nil, err
+		if err = rows.Scan(&filter); err != nil {
+			return nil, fmt.Errorf("error occured while getting active filters: %w", err)
 		}
 
 		filters = append(filters, filter)

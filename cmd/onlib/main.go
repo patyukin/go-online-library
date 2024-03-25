@@ -4,14 +4,16 @@ import (
 	"context"
 	"github.com/patyukin/go-online-library/internal/config"
 	"github.com/patyukin/go-online-library/internal/cronjob"
+	"github.com/patyukin/go-online-library/internal/handler"
 	"github.com/patyukin/go-online-library/internal/repository"
+	"github.com/patyukin/go-online-library/internal/sender"
 	"github.com/patyukin/go-online-library/internal/server"
-	"github.com/patyukin/go-online-library/internal/service/promotion"
+	"github.com/patyukin/go-online-library/internal/server/router"
+	"github.com/patyukin/go-online-library/internal/usecase"
 	"github.com/patyukin/go-online-library/pkg/db/mysql"
 	"github.com/patyukin/go-online-library/pkg/db/transaction"
 	"github.com/patyukin/go-online-library/pkg/migrator"
 	"github.com/sirupsen/logrus"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -23,36 +25,36 @@ func main() {
 
 	cfg, err := config.Get("./internal/config/env.conf")
 	if err != nil {
-		log.Fatal(err)
+		logrus.Fatalf("error occured while getting config: %v", err)
 	}
 
 	dbClient, err := mysql.New(ctx, cfg.MySQL.DSN)
+	if err != nil {
+		logrus.Fatalf("error occured while connecting to db: %v", err)
+	}
+
 	err = migrator.UpMigrations(dbClient.GetSqlDB())
+	if err != nil {
+		logrus.Fatalf("error occured while up migrations: %v", err)
+	}
+
 	txManager := transaction.NewTransactionManager(dbClient.DB())
 
-	filterRepo := repository.NewFilterRepo(dbClient)
-	promotionRepo := repository.NewPromotionRepo(dbClient)
-	directoryRepo := repository.NewDirectoryRepo(dbClient)
-	promotionService := promotion.New(promotionRepo, filterRepo, directoryRepo, txManager)
-	//handlers := server.NewHandler(promotionService)
-	handlers := server.NewHandler(promotionService)
+	repo := repository.New(dbClient)
+	sndr := sender.NewSender()
+	uc := usecase.New(repo, txManager, sndr)
+	h := handler.New(uc)
+	rtr := router.Init(h)
 
-	errSrvCh := make(chan error)
-	srv := server.New(handlers)
-	go func() {
-		if err = srv.Run("0.0.0.0:8087"); err != nil {
-			logrus.Fatalf("error occured while running http server: %v", err)
-			errSrvCh <- err
-		}
-	}()
+	errCh := make(chan error)
 
-	errCronErr := make(chan error)
+	srv := server.New(rtr)
+
 	cj := cronjob.NewCronJob()
 	err = cj.AddFunc("@every 1h", func() {
-		err = promotionService.GetAllPromotions(ctx)
+		err = uc.GetAllPromotions(ctx)
 		if err != nil {
-			logrus.Fatalf("error occured while adding cron job: %v", err)
-			errCronErr <- err
+			logrus.Errorf("error occured while adding cron job: %v", err)
 		}
 	})
 
@@ -61,19 +63,24 @@ func main() {
 	}
 
 	go func() {
+		if err = srv.Run("0.0.0.0:8087"); err != nil {
+			logrus.Errorf("error occured while running http server: %v", err)
+			errCh <- err
+		}
+	}()
+
+	go func() {
 		cj.Start()
 	}()
 
-	logrus.Print("TodoApp Started")
+	logrus.Print("Online Library Started")
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)
 
 	select {
-	case err = <-errCronErr:
-		logrus.Error("Failed to run")
-	case err = <-errSrvCh:
-		logrus.Error("Failed to run")
+	case err = <-errCh:
+		logrus.Errorf("Failed to run, err: %v", err)
 	case res := <-sigChan:
 		if res == syscall.SIGINT || res == syscall.SIGTERM {
 			logrus.Info("Signal received")

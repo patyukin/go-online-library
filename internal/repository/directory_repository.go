@@ -2,80 +2,61 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	sq "github.com/Masterminds/squirrel"
-	"github.com/patyukin/go-online-library/internal/repository/model"
+	"github.com/patyukin/go-online-library/internal/usecase/model"
 	"github.com/patyukin/go-online-library/pkg/db"
+	"time"
 )
 
 const (
-	tableNameDirectory         = "directories"
-	idDirectoryColumn          = "id"
-	nameDirectoryColumn        = "name"
-	promotionIDDirectoryColumn = "promotion_id"
-	createdAtDirectoryColumn   = "created_at"
-	updatedAtDirectoryColumn   = "updated_at"
+	tableNameDirectory       = "directories"
+	idDirectoryColumn        = "id"
+	nameDirectoryColumn      = "name"
+	createdAtDirectoryColumn = "created_at"
+	updatedAtDirectoryColumn = "updated_at"
+	deletedAtDirectoryColumn = "deleted_at"
 )
 
-type DirectoryRepo struct {
-	db db.Client
-}
-
-func NewDirectoryRepo(db db.Client) *DirectoryRepo {
-	return &DirectoryRepo{
-		db: db,
-	}
-}
-
-func (r *DirectoryRepo) Insert(ctx context.Context, directory model.Directory) (int64, error) {
+func (r *Repository) InsertDirectory(ctx context.Context, directory model.Directory) (int64, error) {
+	directory.CreatedAt = time.Now().UTC()
 	builder := sq.Insert(tableNameDirectory).
-		Columns(nameDirectoryColumn, promotionIDDirectoryColumn).
-		Values(directory.Name, directory.PromotionID).
 		PlaceholderFormat(sq.Question).
-		Suffix("RETURNING " + idDirectoryColumn)
+		Columns(nameDirectoryColumn, createdAtDirectoryColumn).
+		Values(directory.Name, directory.CreatedAt)
 
 	query, args, err := builder.ToSql()
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to build query: %w", err)
 	}
 
 	q := db.Query{Name: "directory_repository.Insert", QueryRaw: query}
-	err = r.db.DB().QueryRowContext(ctx, q, args...).Scan(&directory.ID)
+	res, err := r.db.DB().ExecContext(ctx, q, args...)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to insert directory: %w", err)
 	}
 
-	return directory.ID, nil
+	return res.LastInsertId()
 }
 
-func (r *DirectoryRepo) Inserts(ctx context.Context, directories []model.Directory) (int64, error) {
-	builder := sq.Insert(tableNameDirectory).
-		Columns(nameDirectoryColumn, promotionIDDirectoryColumn).
-		PlaceholderFormat(sq.Question).
-		Suffix("RETURNING " + idDirectoryColumn)
-
+func (r *Repository) InsertsDirectories(ctx context.Context, directories []model.Directory) ([]int64, error) {
+	ids := make([]int64, 0, len(directories))
 	for _, directory := range directories {
-		builder = builder.Values(directory.Name, directory.PromotionID)
+		id, err := r.InsertDirectory(ctx, directory)
+		if err != nil {
+			return nil, fmt.Errorf("failed to insert directory: %w", err)
+		}
+
+		ids = append(ids, id)
 	}
 
-	query, args, err := builder.ToSql()
-	if err != nil {
-		return 0, err
-	}
-
-	q := db.Query{Name: "directory_repository.Inserts", QueryRaw: query}
-	err = r.db.DB().QueryRowContext(ctx, q, args...).Scan(&directories[0].ID)
-	if err != nil {
-		return 0, err
-	}
-
-	return int64(len(directories)), nil
+	return ids, nil
 }
 
-func (r *DirectoryRepo) Update(ctx context.Context, directory model.Directory) error {
+func (r *Repository) UpdateDirectory(ctx context.Context, directory model.Directory) error {
 	builder := sq.Update(tableNameDirectory).
 		PlaceholderFormat(sq.Question).
 		Set(nameDirectoryColumn, directory.Name).
-		Set(promotionIDDirectoryColumn, directory.PromotionID).
 		Where(sq.Eq{"id": directory.ID})
 
 	query, args, err := builder.ToSql()
@@ -92,7 +73,7 @@ func (r *DirectoryRepo) Update(ctx context.Context, directory model.Directory) e
 	return nil
 }
 
-func (r *DirectoryRepo) Delete(ctx context.Context, id int64) error {
+func (r *Repository) DeleteDirectory(ctx context.Context, id int64) error {
 	builder := sq.Delete(tableNameDirectory).
 		PlaceholderFormat(sq.Question).
 		Where(sq.Eq{"id": id})
@@ -111,8 +92,8 @@ func (r *DirectoryRepo) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
-func (r *DirectoryRepo) Get(ctx context.Context, id int64) (model.Directory, error) {
-	builder := sq.Select(idDirectoryColumn, nameDirectoryColumn, promotionIDDirectoryColumn, createdAtDirectoryColumn, updatedAtDirectoryColumn).
+func (r *Repository) GetDirectory(ctx context.Context, id int64) (model.Directory, error) {
+	builder := sq.Select(idDirectoryColumn, nameDirectoryColumn, createdAtDirectoryColumn, updatedAtDirectoryColumn).
 		From(tableNameDirectory).
 		PlaceholderFormat(sq.Question).
 		Where(sq.Eq{"id": id})
@@ -124,7 +105,7 @@ func (r *DirectoryRepo) Get(ctx context.Context, id int64) (model.Directory, err
 
 	q := db.Query{Name: "directory_repository.Get", QueryRaw: query}
 	var directory model.Directory
-	err = r.db.DB().QueryRowContext(ctx, q, args...).Scan(&directory.ID, &directory.Name, &directory.PromotionID, &directory.CreatedAt, &directory.UpdatedAt)
+	err = r.db.DB().QueryRowContext(ctx, q, args...).Scan(&directory.ID, &directory.Name, &directory.CreatedAt, &directory.UpdatedAt)
 	if err != nil {
 		return model.Directory{}, err
 	}
@@ -132,8 +113,8 @@ func (r *DirectoryRepo) Get(ctx context.Context, id int64) (model.Directory, err
 	return directory, nil
 }
 
-func (r *DirectoryRepo) GetAll(ctx context.Context) ([]model.Directory, error) {
-	builder := sq.Select(idDirectoryColumn, nameDirectoryColumn, promotionIDDirectoryColumn, createdAtDirectoryColumn, updatedAtDirectoryColumn).
+func (r *Repository) GetAllDirectories(ctx context.Context) ([]model.Directory, error) {
+	builder := sq.Select(idDirectoryColumn, nameDirectoryColumn, createdAtDirectoryColumn, updatedAtDirectoryColumn).
 		From(tableNameDirectory)
 
 	query, args, err := builder.ToSql()
@@ -151,7 +132,7 @@ func (r *DirectoryRepo) GetAll(ctx context.Context) ([]model.Directory, error) {
 	var directories []model.Directory
 	for rows.Next() {
 		var directory model.Directory
-		err = rows.Scan(&directory.ID, &directory.Name, &directory.PromotionID, &directory.CreatedAt, &directory.UpdatedAt)
+		err = rows.Scan(&directory.ID, &directory.Name, &directory.CreatedAt, &directory.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -161,8 +142,8 @@ func (r *DirectoryRepo) GetAll(ctx context.Context) ([]model.Directory, error) {
 	return directories, nil
 }
 
-func (r *DirectoryRepo) GetByPromotionID(ctx context.Context, promotionID int64) ([]model.Directory, error) {
-	builder := sq.Select(idDirectoryColumn, nameDirectoryColumn, promotionIDDirectoryColumn, createdAtDirectoryColumn, updatedAtDirectoryColumn).
+func (r *Repository) GetDirectoryByPromotionID(ctx context.Context, promotionID int64) ([]model.Directory, error) {
+	builder := sq.Select(idDirectoryColumn, nameDirectoryColumn, createdAtDirectoryColumn, updatedAtDirectoryColumn).
 		From(tableNameDirectory).
 		Where(sq.Eq{"promotion_id": promotionID})
 
@@ -181,7 +162,7 @@ func (r *DirectoryRepo) GetByPromotionID(ctx context.Context, promotionID int64)
 	var directories []model.Directory
 	for rows.Next() {
 		var directory model.Directory
-		err = rows.Scan(&directory.ID, &directory.Name, &directory.PromotionID, &directory.CreatedAt, &directory.UpdatedAt)
+		err = rows.Scan(&directory.ID, &directory.Name, &directory.CreatedAt, &directory.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
