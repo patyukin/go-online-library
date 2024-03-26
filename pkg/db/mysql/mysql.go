@@ -20,12 +20,6 @@ type mysql struct {
 	dbConn *sql.DB
 }
 
-func NewDB(dbc *sql.DB) db.DB {
-	return &mysql{
-		dbConn: dbc,
-	}
-}
-
 func (p *mysql) ScanOneContext(ctx context.Context, dest interface{}, q db.Query, args ...interface{}) error {
 	logQuery(ctx, q, args...)
 
@@ -85,8 +79,8 @@ func (p *mysql) BeginTx(ctx context.Context, txOptions *sql.TxOptions) (*sql.Tx,
 	return p.dbConn.BeginTx(ctx, txOptions)
 }
 
-func (p *mysql) Ping(_ context.Context) error {
-	return p.dbConn.Ping()
+func (p *mysql) PingContext(ctx context.Context) error {
+	return p.dbConn.PingContext(ctx)
 }
 
 func (p *mysql) Close() {
@@ -106,5 +100,6 @@ func logQuery(ctx context.Context, q db.Query, args ...interface{}) {
 		ctx,
 		fmt.Sprintf("sql: %s", q.Name),
 		fmt.Sprintf("query: %s", prettyQuery),
+		fmt.Sprintf("args: %v", args...),
 	)
 }

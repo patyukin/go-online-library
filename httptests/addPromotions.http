@@ -1,0 +1,22 @@
+### Send POST request with json body
+POST http://0.0.0.0:8087/v1/promotions
+Content-Type: application/json
+
+{
+  "name": "NAME 1",
+  "description":  "dsfsdfsdf",
+  "status": 1,
+  "type": "oncetime",
+  "directories": [
+    {"name":  "NAME 1"}
+  ],
+  "filters": [
+    {
+      "min_age": 10,
+      "max_age": "",
+      "register_date": "2024-01-01 20:00",
+      "last_activity": "2024-03-01 00:00:00",
+      "notify_datetime": "2024-04-01 12:00:00"
+    }
+  ]
+}

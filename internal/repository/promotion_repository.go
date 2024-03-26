@@ -2,76 +2,54 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	sq "github.com/Masterminds/squirrel"
-	"github.com/patyukin/go-online-library/internal/repository/model"
+	"github.com/patyukin/go-online-library/internal/usecase/model"
 	"github.com/patyukin/go-online-library/pkg/db"
+	"time"
 )
 
 const (
-	tableNamePromo       = "promotions"
-	idPromoColumn        = "id"
-	namePromoColumn      = "name"
-	activePromoColumn    = "active"
-	countPromoColumn     = "count"
-	createdAtPromoColumn = "created_at"
-	updatedAtPromoColumn = "updated_at"
-	deletedAtPromoColumn = "deleted_at"
+	tableNamePromo         = "promotions"
+	idPromoColumn          = "id"
+	namePromoColumn        = "name"
+	descriptionPromoColumn = "description"
+	commentPromoColumn     = "comment"
+	statusPromoColumn      = "status"
+	typePromoColumn        = "type"
+	createdAtPromoColumn   = "created_at"
+	updatedAtPromoColumn   = "updated_at"
+	deletedAtPromoColumn   = "deleted_at"
 )
 
-type PromotionRepo struct {
-	db db.Client
-}
-
-func NewPromotionRepo(db db.Client) *PromotionRepo {
-	return &PromotionRepo{
-		db: db,
-	}
-}
-
-func (r *PromotionRepo) Insert(ctx context.Context, promotion model.Promotion) (int64, error) {
-	builder := sq.Insert(tableNamePromo).
-		Columns(namePromoColumn, activePromoColumn, countPromoColumn).
-		Values(promotion.Name, promotion.Active, promotion.Count).
+func (r *Repository) InsertPromotion(ctx context.Context, promotion model.Promotion) (int64, error) {
+	promotion.CreatedAt = time.Now().UTC()
+	qb := sq.Insert(tableNamePromo).
 		PlaceholderFormat(sq.Question).
-		Suffix("RETURNING " + idPromoColumn)
+		Columns(namePromoColumn, descriptionPromoColumn, commentPromoColumn, statusPromoColumn, typePromoColumn, createdAtPromoColumn, updatedAtPromoColumn, deletedAtPromoColumn).
+		Values(promotion.Name, promotion.Description, promotion.Comment, promotion.Status, promotion.Type, promotion.CreatedAt, nil, nil)
 
-	query, args, err := builder.ToSql()
+	query, args, err := qb.ToSql()
 	if err != nil {
 		return 0, err
 	}
 
-	q := db.Query{Name: "promotion_repository.Insert", QueryRaw: query}
-	err = r.db.DB().QueryRowContext(ctx, q, args...).Scan(&promotion.ID)
+	q := db.Query{Name: "promotion_repository.InsertPromotion", QueryRaw: query}
+
+	res, err := r.db.DB().ExecContext(ctx, q, args...)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("promotion_repository.InsertPromotion, r.db.DB().ExecContext: %w", err)
 	}
 
-	return promotion.ID, nil
+	return res.LastInsertId()
 }
 
-func (r *PromotionRepo) Update(ctx context.Context, promotion model.Promotion) error {
-	builder := sq.Update(tableNamePromo).
-		PlaceholderFormat(sq.Question).
-		Set(namePromoColumn, promotion.Name).
-		Set("active", promotion.Active).
-		Set("count", promotion.Count).
-		Where(sq.Eq{"id": promotion.ID})
-
-	query, args, err := builder.ToSql()
-	if err != nil {
-		return err
-	}
-
-	q := db.Query{Name: "promotion_repository.Update", QueryRaw: query}
-	_, err = r.db.DB().ExecContext(ctx, q, args...)
-	if err != nil {
-		return err
-	}
+func (r *Repository) UpdatePromotion(ctx context.Context, promotion model.Promotion) error {
 
 	return nil
 }
 
-func (r *PromotionRepo) Delete(ctx context.Context, filterID int64) error {
+func (r *Repository) DeletePromotion(ctx context.Context, filterID int64) error {
 	builder := sq.Delete(tableNamePromo).
 		PlaceholderFormat(sq.Question).
 		Where(sq.Eq{"id": filterID})
@@ -90,54 +68,66 @@ func (r *PromotionRepo) Delete(ctx context.Context, filterID int64) error {
 	return nil
 }
 
-func (r *PromotionRepo) Get(ctx context.Context, filterID int64) (model.Promotion, error) {
-	builder := sq.Select(idPromoColumn, namePromoColumn, activePromoColumn, countPromoColumn, createdAtPromoColumn, updatedAtPromoColumn, deletedAtPromoColumn).
-		From(tableNamePromo).
-		PlaceholderFormat(sq.Question).
-		Where(sq.Eq{"id": filterID})
-
-	query, args, err := builder.ToSql()
-	if err != nil {
-		return model.Promotion{}, err
-	}
-
-	q := db.Query{Name: "promotion_repository.Get", QueryRaw: query}
-
-	var promotion model.Promotion
-	err = r.db.DB().QueryRowContext(ctx, q, args...).Scan(&promotion.ID, &promotion.Name, &promotion.Active, &promotion.Count, &promotion.CreatedAt, &promotion.UpdatedAt, &promotion.DeletedAt)
-	if err != nil {
-		return model.Promotion{}, err
-	}
-
-	return promotion, nil
+func (r *Repository) GetPromotion(ctx context.Context, filterID int64) (model.Promotion, error) {
+	return model.Promotion{}, nil
 }
 
-func (r *PromotionRepo) GetAll(ctx context.Context) ([]model.Promotion, error) {
-	builder := sq.Select(idPromoColumn, namePromoColumn, activePromoColumn, countPromoColumn, createdAtPromoColumn, updatedAtPromoColumn, deletedAtPromoColumn).
-		From(tableNamePromo)
+func (r *Repository) GetAllPromotions(ctx context.Context) ([]model.Promotion, error) {
+	return []model.Promotion{}, nil
+}
 
-	query, args, err := builder.ToSql()
+func (r *Repository) InsertsPromotionDirectories(ctx context.Context, promotionID int64, directoryIDs []int64) error {
+	qb := sq.Insert("promotions_directories").
+		PlaceholderFormat(sq.Question).
+		Columns("promotion_id", "directory_id")
+
+	for _, d := range directoryIDs {
+		qb = qb.Values(promotionID, d)
+	}
+
+	query, args, err := qb.ToSql()
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("promotion_repository.InsertsPromotionDirectories, qb.ToSql: %w", err)
 	}
 
-	q := db.Query{Name: "promotion_repository.GetAll", QueryRaw: query}
-
-	rows, err := r.db.DB().QueryContext(ctx, q, args...)
+	q := db.Query{Name: "promotion_repository.InsertsPromotionDirectories", QueryRaw: query}
+	res, err := r.db.DB().ExecContext(ctx, q, args...)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("promotion_repository.InsertsPromotionDirectories, r.db.DB().ExecContext: %w", err)
 	}
 
-	var promotions []model.Promotion
-	for rows.Next() {
-		var promotion model.Promotion
-		err = rows.Scan(&promotion.ID, &promotion.Name, &promotion.Active, &promotion.Count, &promotion.CreatedAt, &promotion.UpdatedAt, &promotion.DeletedAt)
-		if err != nil {
-			return nil, err
-		}
-
-		promotions = append(promotions, promotion)
+	count, err := res.RowsAffected()
+	if err != nil || count != int64(len(directoryIDs)) {
+		return fmt.Errorf("promotion_repository.InsertsPromotionDirectories, res.RowsAffected: %w", err)
 	}
 
-	return promotions, nil
+	return nil
+}
+
+func (r *Repository) InsertsPromotionFilters(ctx context.Context, promotionID int64, filterIDs []int64) error {
+	qb := sq.Insert("promotions_filters").
+		PlaceholderFormat(sq.Question).
+		Columns("promotion_id", "filter_id")
+
+	for _, f := range filterIDs {
+		qb = qb.Values(promotionID, f)
+	}
+
+	query, args, err := qb.ToSql()
+	if err != nil {
+		return fmt.Errorf("promotion_repository.InsertsPromotionFilters, qb.ToSql: %w", err)
+	}
+
+	q := db.Query{Name: "promotion_repository.InsertsPromotionFilters", QueryRaw: query}
+	res, err := r.db.DB().ExecContext(ctx, q, args...)
+	if err != nil {
+		return fmt.Errorf("promotion_repository.InsertsPromotionFilters, r.db.DB().ExecContext: %w", err)
+	}
+
+	count, err := res.RowsAffected()
+	if err != nil || count != int64(len(filterIDs)) {
+		return fmt.Errorf("promotion_repository.InsertsPromotionFilters, res.RowsAffected: %w", err)
+	}
+
+	return nil
 }

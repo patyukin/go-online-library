@@ -13,12 +13,3 @@ func New(db db.Client) *Repository {
 		db: db,
 	}
 }
-
-func (r *Repository) InsertDirectory() db.Client {
-	return r.db
-}
-
-// PUT users/1/profile/1
-// DELETE users/1/profile/1
-
-// car  users
