@@ -17,6 +17,7 @@ func (uc *UseCase) SendFilters(ctx context.Context) error {
 
 		return nil
 	})
+
 	if err != nil {
 		return fmt.Errorf("error occured while sending filters: %w", err)
 	}
@@ -29,6 +30,8 @@ func (uc *UseCase) SendFilters(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("error occured while sending filters: %w", err)
 	}
+
+	// recieve response
 
 	return nil
 }

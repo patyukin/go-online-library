@@ -50,13 +50,11 @@ func main() {
 
 	srv := server.New(rtr)
 
-	cj := cronjob.NewCronJob()
-	err = cj.AddFunc("@every 1h", func() {
-		err = uc.GetAllPromotions(ctx)
-		if err != nil {
-			logrus.Errorf("error occured while adding cron job: %v", err)
-		}
-	})
+	cj := cronjob.NewCronJob(uc)
+	err = cj.Run(ctx, errCh)
+	if err != nil {
+		logrus.Fatalf("error occured while adding cron job: %v", err)
+	}
 
 	if err != nil {
 		logrus.Fatalf("error occured while adding cron job: %v", err)
@@ -67,10 +65,6 @@ func main() {
 			logrus.Errorf("error occured while running http server: %v", err)
 			errCh <- err
 		}
-	}()
-
-	go func() {
-		cj.Start()
 	}()
 
 	logrus.Print("Online Library Started")
@@ -88,8 +82,6 @@ func main() {
 			logrus.Info("Signal received")
 		}
 	}
-
-	cancel()
 
 	logrus.Print("Shutting Down")
 

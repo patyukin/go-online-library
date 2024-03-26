@@ -3,9 +3,11 @@ package transaction
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"github.com/patyukin/go-online-library/pkg/db"
 	"github.com/patyukin/go-online-library/pkg/db/mysql"
+	"github.com/sirupsen/logrus"
 )
 
 type manager struct {
@@ -32,8 +34,10 @@ func (m *manager) transaction(ctx context.Context, opts sql.TxOptions, fn db.Han
 	ctx = context.WithValue(ctx, mysql.TxKey, tx)
 
 	defer func() {
-		if errRollback := tx.Rollback(); errRollback != nil {
-			fmt.Printf("failed to rollback transaction: %w", errRollback)
+		if !errors.Is(err, sql.ErrTxDone) {
+			if errRollback := tx.Rollback(); errRollback != nil {
+				logrus.Errorf("failed to rollback transaction: %w", errRollback)
+			}
 		}
 	}()
 

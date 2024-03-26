@@ -1,26 +1,45 @@
 package cronjob
 
-import "github.com/robfig/cron/v3"
+import (
+	"context"
+	"github.com/robfig/cron/v3"
+)
 
 type CronJob struct {
-	c *cron.Cron
+	c  *cron.Cron
+	uc UseCase
 }
 
-func NewCronJob() *CronJob {
+type UseCase interface {
+	GetAllPromotions(ctx context.Context) error
+}
+
+func NewCronJob(uc UseCase) *CronJob {
 	return &CronJob{
-		c: cron.New(),
+		c:  cron.New(),
+		uc: uc,
 	}
-}
-
-func (cj *CronJob) Start() {
-	cj.c.Start()
 }
 
 func (cj *CronJob) Stop() {
 	cj.c.Stop()
 }
 
-func (cj *CronJob) AddFunc(schedule string, f func()) error {
-	_, err := cj.c.AddFunc(schedule, f)
-	return err
+func (cj *CronJob) Run(ctx context.Context, errCh chan error) error {
+	//_, err := cj.c.AddFunc(schedule, f)
+	//err = cj.uc.GetAllPromotions(ctx)
+	//if err != nil {
+	//	logrus.Error(err)
+	//	return err
+	//}
+	//cj.c.Start()
+
+	/// Todo
+	//err = uc.GetAllPromotions(ctx)
+	//if err != nil {
+	//	logrus.Errorf("error occured while adding cron job: %v", err)
+	//}
+	//return err
+
+	return nil
 }
